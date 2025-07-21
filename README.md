@@ -10,3 +10,7 @@ Egg model, oil reservoir optimization benchmark for research.
 ## Info for MRST
 
 - [oil reservior](https://github.com/hao12312/reservoir-simulation?tab=readme-ov-file) repo
+
+## Change to the mrst-2024b
+- max iteration 25->50
+- cutting time step 0.5->0.25
