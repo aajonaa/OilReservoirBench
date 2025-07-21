@@ -1,0 +1,6 @@
+libcorrexpgInitialize
+libcorrexpgInitializeWithHandlers
+libcorrexpgTerminate
+libcorrexpgPrintStackTrace
+mlxCorrexpg
+

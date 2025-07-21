@@ -1,0 +1,6 @@
+libcorrgaussInitialize
+libcorrgaussInitializeWithHandlers
+libcorrgaussTerminate
+libcorrgaussPrintStackTrace
+mlxCorrgauss
+

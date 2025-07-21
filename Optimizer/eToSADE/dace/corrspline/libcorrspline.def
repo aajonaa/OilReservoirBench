@@ -1,0 +1,8 @@
+LIBRARY libcorrspline
+EXPORTS
+libcorrsplineInitialize
+libcorrsplineInitializeWithHandlers
+libcorrsplineTerminate
+libcorrsplinePrintStackTrace
+mlxCorrspline
+

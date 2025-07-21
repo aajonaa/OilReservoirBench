@@ -1,0 +1,8 @@
+LIBRARY libgridsamp
+EXPORTS
+libgridsampInitialize
+libgridsampInitializeWithHandlers
+libgridsampTerminate
+libgridsampPrintStackTrace
+mlxGridsamp
+

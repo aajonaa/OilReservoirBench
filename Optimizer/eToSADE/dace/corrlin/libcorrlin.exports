@@ -1,0 +1,6 @@
+libcorrlinInitialize
+libcorrlinInitializeWithHandlers
+libcorrlinTerminate
+libcorrlinPrintStackTrace
+mlxCorrlin
+

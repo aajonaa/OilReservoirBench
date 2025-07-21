@@ -1,0 +1,6 @@
+libcorrsplineInitialize
+libcorrsplineInitializeWithHandlers
+libcorrsplineTerminate
+libcorrsplinePrintStackTrace
+mlxCorrspline
+

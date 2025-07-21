@@ -1,0 +1,8 @@
+LIBRARY libcorrlin
+EXPORTS
+libcorrlinInitialize
+libcorrlinInitializeWithHandlers
+libcorrlinTerminate
+libcorrlinPrintStackTrace
+mlxCorrlin
+

@@ -1,0 +1,6 @@
+libdsmergeInitialize
+libdsmergeInitializeWithHandlers
+libdsmergeTerminate
+libdsmergePrintStackTrace
+mlxDsmerge
+

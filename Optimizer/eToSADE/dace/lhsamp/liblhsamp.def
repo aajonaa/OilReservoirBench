@@ -1,0 +1,8 @@
+LIBRARY liblhsamp
+EXPORTS
+liblhsampInitialize
+liblhsampInitializeWithHandlers
+liblhsampTerminate
+liblhsampPrintStackTrace
+mlxLhsamp
+

@@ -1,0 +1,6 @@
+liblhsampInitialize
+liblhsampInitializeWithHandlers
+liblhsampTerminate
+liblhsampPrintStackTrace
+mlxLhsamp
+

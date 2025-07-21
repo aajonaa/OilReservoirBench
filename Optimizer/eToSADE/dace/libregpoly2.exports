@@ -1,0 +1,6 @@
+libregpoly2Initialize
+libregpoly2InitializeWithHandlers
+libregpoly2Terminate
+libregpoly2PrintStackTrace
+mlxRegpoly2
+

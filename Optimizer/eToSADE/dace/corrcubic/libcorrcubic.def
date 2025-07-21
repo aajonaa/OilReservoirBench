@@ -1,0 +1,8 @@
+LIBRARY libcorrcubic
+EXPORTS
+libcorrcubicInitialize
+libcorrcubicInitializeWithHandlers
+libcorrcubicTerminate
+libcorrcubicPrintStackTrace
+mlxCorrcubic
+

@@ -1,0 +1,8 @@
+LIBRARY libpredictor
+EXPORTS
+libpredictorInitialize
+libpredictorInitializeWithHandlers
+libpredictorTerminate
+libpredictorPrintStackTrace
+mlxPredictor
+

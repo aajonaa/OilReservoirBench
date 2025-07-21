@@ -1,0 +1,8 @@
+LIBRARY libcorrexp
+EXPORTS
+libcorrexpInitialize
+libcorrexpInitializeWithHandlers
+libcorrexpTerminate
+libcorrexpPrintStackTrace
+mlxCorrexp
+

@@ -1,0 +1,8 @@
+LIBRARY libdsmerge
+EXPORTS
+libdsmergeInitialize
+libdsmergeInitializeWithHandlers
+libdsmergeTerminate
+libdsmergePrintStackTrace
+mlxDsmerge
+

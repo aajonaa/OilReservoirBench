@@ -1,0 +1,6 @@
+libcorrsphericalInitialize
+libcorrsphericalInitializeWithHandlers
+libcorrsphericalTerminate
+libcorrsphericalPrintStackTrace
+mlxCorrspherical
+

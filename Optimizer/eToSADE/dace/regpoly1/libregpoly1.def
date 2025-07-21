@@ -1,0 +1,8 @@
+LIBRARY libregpoly1
+EXPORTS
+libregpoly1Initialize
+libregpoly1InitializeWithHandlers
+libregpoly1Terminate
+libregpoly1PrintStackTrace
+mlxRegpoly1
+

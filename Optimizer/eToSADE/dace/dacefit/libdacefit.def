@@ -1,0 +1,8 @@
+LIBRARY libdacefit
+EXPORTS
+libdacefitInitialize
+libdacefitInitializeWithHandlers
+libdacefitTerminate
+libdacefitPrintStackTrace
+mlxDacefit
+
