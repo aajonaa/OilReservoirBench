@@ -75,9 +75,29 @@ function setup_benchmark()
         error('Egg Model data required but not found');
     end
     
-    %% Step 3: Check C++ Compiler for AMGCL
-    fprintf('\n3. Checking C++ compiler for AMGCL...\n');
-    
+    %% Step 3: Check AMGCL Dependencies
+    fprintf('\n3. Checking AMGCL dependencies...\n');
+
+    amgclPath = fullfile('mrst-2024b', 'modules', 'linearsolvers', 'amgcl', 'dependencies', 'amgcl-4f260881c7158bc5aede881f5f0ed272df2ab580');
+    boostPath = fullfile('mrst-2024b', 'modules', 'linearsolvers', 'amgcl', 'dependencies', 'boost-1_65_1_subset');
+
+    if exist(fullfile(amgclPath, 'amgcl', 'make_solver.hpp'), 'file')
+        fprintf('   ✓ AMGCL source code found\n');
+    else
+        fprintf('   ✗ AMGCL source code not found\n');
+        error('AMGCL source code missing');
+    end
+
+    if exist(fullfile(boostPath, 'boost'), 'dir')
+        fprintf('   ✓ Boost headers found\n');
+    else
+        fprintf('   ✗ Boost headers not found\n');
+        error('Boost headers missing');
+    end
+
+    %% Step 4: Check C++ Compiler for AMGCL
+    fprintf('\n4. Checking C++ compiler for AMGCL...\n');
+
     try
         % Check if MEX is configured for C++
         mex -setup C++
@@ -89,8 +109,8 @@ function setup_benchmark()
         error('C++ compiler required for AMGCL');
     end
     
-    %% Step 4: Test Basic Setup
-    fprintf('\n4. Testing basic setup...\n');
+    %% Step 5: Test Basic Setup
+    fprintf('\n5. Testing basic setup...\n');
     
     try
         % Test Egg model loading
