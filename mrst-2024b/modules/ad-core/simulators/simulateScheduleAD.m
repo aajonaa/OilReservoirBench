@@ -261,6 +261,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     dispif(opt.Verbose, 'Validating initial state...\n')
     state = model.validateState(initState);
     dispif(opt.Verbose, 'Initial state ok. Ready to begin simulation.\n')
+
     failure = false;
     simtime = zeros(nSteps, 1);
     prevControl = nan;

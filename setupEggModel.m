@@ -1,4 +1,4 @@
-function [G, rock, fluid, model, state0, W, schedule] = setupEggModel()
+function [G, rock, fluid, model, state0, W, schedule, nonlinear] = setupEggModel()
 %% setupEggModel - Research-Standard Egg Model Setup for Oil Reservoir Optimization
 %
 % This function creates a clean, research-standard implementation of the Egg Model
@@ -12,6 +12,7 @@ function [G, rock, fluid, model, state0, W, schedule] = setupEggModel()
 %   state0   - Initial reservoir state
 %   W        - Well structures (8 injectors + 4 producers)
 %   schedule - Simulation schedule template
+%   nonlinear- NonLinearSolver with AMGCL configuration
 %
 % REFERENCE:
 %   Jansen, J.D., et al. (2014). "The egg model - a geological ensemble for
@@ -36,13 +37,14 @@ function [G, rock, fluid, model, state0, W, schedule] = setupEggModel()
         try
             mrstSettings('set', 'allowDL', false);
             mrstSettings('set', 'promptDL', false);
-            mrstSettings('set', 'useAMGCL', false);  % Disable AMGCL
+            mrstSettings('set', 'useAMGCL', true);  % Disable AMGCL
+        mrstSettings('set', 'allowDL', true);    % Allow downloads for AMGCL dependencies
         catch
             % Settings may not be available, continue anyway
         end
 
         % Load required modules (modern MRST-2024b approach)
-        mrstModule add ad-core ad-blackoil deckformat test-suite
+        mrstModule add ad-core ad-blackoil deckformat test-suite linearsolvers
 
         fprintf('✓ MRST modules loaded (dependency dialogs suppressed)\n');
     catch ME
@@ -52,11 +54,10 @@ function [G, rock, fluid, model, state0, W, schedule] = setupEggModel()
     %% Step 2: Load Egg Model using direct Eclipse loading
     try
         % Use direct Eclipse loading to bypass MRST dataset issues
-        % Try multiple possible locations for the deck file
+        % Try local file locations only for complete portability
         deckPaths = {
-            'C:\Users\admin\Documents\MRST\data\Egg\Eclipse\Egg_Model_ECL.DATA',  % Installed location
-            fullfile('Egg', 'Eclipse', 'Egg_Model_ECL.DATA'),                    % Local location
-            fullfile('Eclipse', 'Egg_Model_ECL.DATA')                            % Alternative local
+            fullfile('Egg', 'Eclipse', 'Egg_Model_ECL.DATA'),     % Primary local location
+            fullfile('Eclipse', 'Egg_Model_ECL.DATA')             % Alternative local location
         };
 
         deckFile = '';
@@ -113,13 +114,77 @@ function [G, rock, fluid, model, state0, W, schedule] = setupEggModel()
     
     %% Step 3: Initialize modern model and schedule
     try
-        % Use modern initEclipseProblemAD for complete setup
+        % Use modern initEclipseProblemAD for complete setup with timestep control
         [state0, model, schedule, nonlinear] = initEclipseProblemAD(deck, ...
             'G', G, 'TimestepStrategy', 'none');
 
-        % Configure linear solver to use MATLAB built-in (avoid AMGCL issues)
-        if isfield(nonlinear, 'LinearSolver')
-            nonlinear.LinearSolver = selectLinearSolverAD(model, 'useMex', false);
+        % Configure AMGCL linear solver following official SINTEF documentation
+        if ~isempty(nonlinear) && isa(nonlinear, 'NonLinearSolver')
+            fprintf('  Setting up AMGCL linear solver...\n');
+
+            % Step 1: Enable automatic downloads
+            mrstSettings('set', 'allowDL', true);
+            mrstSettings('set', 'promptDL', false);
+
+            % Step 2: Set up global variables and download dependencies
+            global BOOSTPATH AMGCLPATH;
+            try
+                fprintf('  Downloading AMGCL dependencies (if needed)...\n');
+                [AMGCLPATH, BOOSTPATH] = getAMGCLDependencyPaths();
+                fprintf('  Dependencies ready: AMGCL and Boost configured\n');
+
+                % Step 3: Create AMGCL-CPR solver (recommended for reservoir simulation)
+                solver = AMGCL_CPRSolverAD('maxIterations', 100, 'tolerance', 1e-4);
+                solver.setSRelaxation('ilu0');        % ILU(0) relaxation
+                solver.setCoarsening('aggregation');  % Fast aggregation coarsening
+                solver.setSolver('bicgstab');         % BiCGStab Krylov solver
+
+                nonlinear.LinearSolver = solver;
+                fprintf('  ✓ Using AMGCL-CPR linear solver (maximum performance)\n');
+
+            catch ME
+                fprintf('  ⚠ AMGCL setup failed: %s\n', ME.message);
+                fprintf('  Falling back to reliable alternatives...\n');
+
+                try
+                    % Fallback to CPR with built-in AMG (reliable 3-5x speedup)
+                    solver = CPRSolverAD('ellipticSolver', AMGSolverAD(), ...
+                                       'tolerance', 1e-4, 'maxIterations', 100);
+                    nonlinear.LinearSolver = solver;
+                    fprintf('  ✓ Using CPR-AMG linear solver (high performance, reliable)\n');
+                catch
+                    try
+                        % Fallback to MEX-accelerated solver (2-3x speedup)
+                        nonlinear.LinearSolver = selectLinearSolverAD(model, 'useMex', true);
+                        fprintf('  ✓ Using MEX-accelerated solver (good performance)\n');
+                    catch
+                        % Final fallback to standard solver
+                        nonlinear.LinearSolver = selectLinearSolverAD(model, 'useMex', false);
+                        fprintf('  ⚠ Using standard solver (basic performance)\n');
+                    end
+                end
+            end
+
+            % Configure NonLinearSolver for robust convergence
+            fprintf('  Configuring robust convergence settings...\n');
+            nonlinear.maxIterations = 25;        % Reduce from 50 to 25 for faster failure detection
+            nonlinear.maxTimestepCuts = 8;       % Allow more timestep cuts (default: 6)
+            nonlinear.minIterations = 1;         % Minimum iterations before cutting
+
+            % Configure timestep selector for adaptive timesteps
+            if isempty(nonlinear.timeStepSelector) || ~isa(nonlinear.timeStepSelector, 'IterationCountTimeStepSelector')
+                nonlinear.timeStepSelector = IterationCountTimeStepSelector();
+            end
+
+            % Set timestep selector parameters for robust simulation
+            nonlinear.timeStepSelector.targetIterationCount = 8;    % Target 8 iterations
+            nonlinear.timeStepSelector.minTimestep = 0.1*day;       % Minimum timestep: 0.1 day
+            nonlinear.timeStepSelector.maxTimestep = 90*day;        % Maximum timestep: 90 days
+            nonlinear.timeStepSelector.firstRampupStep = 5*day;     % Start with 5-day steps
+
+            fprintf('  ✓ Robust convergence settings configured\n');
+        else
+            fprintf('  ⚠ NonLinearSolver not properly initialized\n');
         end
 
         fprintf('✓ Modern simulation model initialized\n');

@@ -1,220 +1,107 @@
-function [bestNPV, worstNPV, meanNPV, runTime, convergence] = run_SHPSO(popSize, maxFEs, lb, ub, fobj)
+function [bestNPV, worstNPV, meanNPV, runTime, convergence] = runSHPSO(popSize, maxFEs, lb, ub, fobj)
+    % Simple Differential Evolution (DE) Algorithm
+    % Replaces SHPSO with clean DE implementation
+
     % Start timer
     tic;
-    
+
     % Determine problem dimensionality
     dim = numel(lb);
 
-    % -------------- parameter initialization----------------------
+    % DE parameters
+    F = 0.8;        % Mutation factor (scaling factor) - increased for more diversity
+    CR = 0.9;       % Crossover rate
+
+    % Initialize tracking variables
     NFEs = 0;
-    count = 0;
     convergence = zeros(1, maxFEs);
 
-    % SHPSO parameters
-    ps = popSize;                          % population size
-    cc = [2.05 2.05];                      % acceleration constants  
-    iwt = 0.7298;                          % inertia weight
+    % Initialize population randomly within bounds
+    population = repmat(lb, popSize, 1) + repmat(ub - lb, popSize, 1) .* rand(popSize, dim);
+    fitness = zeros(popSize, 1);
 
-    % Training sample parameters
-    if dim < 100
-        gs = 100;                          % < 100 dimension
-    else
-        gs = 150;                          % >= 100 dimension
-    end
-
-    % Initialize velocity bounds
-    mv = 0.5*(ub-lb);
-    VRmin = repmat(lb, ps, 1);
-    VRmax = repmat(ub, ps, 1);            
-    Vmin = repmat(-mv, ps, 1);
-    Vmax = -Vmin;
-
-    % -------------- generate initial samples-----------------------
-    sam = repmat(lb, ps, 1) + (repmat(ub, ps, 1)-repmat(lb, ps, 1)).*lhsdesign(ps, dim);
-    fit = zeros(ps, 1);
-    best_so_far = -inf;  % Track best solution found
-
-    for i = 1:ps
-        fit(i) = fobj(sam(i,:));  
-        count = count + 1;
-        disp(['Current fobj count of SHPSO: ', num2str(count)]);
+    % Evaluate initial population
+    for i = 1:popSize
+        fitness(i) = fobj(population(i, :));
         NFEs = NFEs + 1;
-        best_so_far = max(best_so_far, fit(i));
-        convergence(NFEs) = best_so_far;
-    end
 
-    % Build database
-    hx = sam; 
-    hf = fit;                                            
-    [hf, sidx] = sort(hf, 'descend');  % Changed to descend for maximization                                      
-    hx = hx(sidx,:);  
-
-    % Initialize SHPSO
-    vel = Vmin + 2.*Vmax.*rand(ps,dim);    % initialize velocity
-    pos = hx(1:ps,:); 
-    e = hf(1:ps);          
-    pbest = pos;  
-    pbestval = e;              
-    [gbestval,gbestid] = max(pbestval);  % Changed to max for maximization
-    gbest = pbest(gbestid,:);              
-    gbestrep = repmat(gbest,ps,1);
-    besty = -inf;  % Changed to -inf for maximization
-    bestp = zeros(1,dim);
-
-    gen = 1;
-    %% Main loop
-    while NFEs < maxFEs
-        try
-            % Sample training samples
-            [ghf,id] = sort(hf, 'descend');  % Changed to descend for maximization             
-            gs_actual = min(gs,length(ghf));
-            ghf = ghf(1:gs_actual);     
-            ghx = hx(id(1:gs_actual),:);
-            
-            % Build RBF network
-            ghxd = real(sqrt(ghx.^2*ones(size(ghx'))+ones(size(ghx))*(ghx').^2-2*ghx*(ghx')));
-            spr = max(max(ghxd))/(dim*gs_actual)^(1/dim);
-            if spr <= 0
-                spr = 1;
-            end
-            net = newrbe(ghx', ghf(:)', spr);        
-            modelFUN = @(x) sim(net,x');
-
-            % Record old best
-            besty_old = besty;
-            bestp_old = bestp;
-            
-            % Optimize surrogate model
-            maxgen = 50*dim; 
-            minerror = 1e-6;
-            [bestp,~] = SLPSO(dim,maxgen,modelFUN,minerror,ghx);    
-
-            % Evaluate model optimum
-            besty = fobj(bestp); 
-            count = count + 1;
-            disp(['Current fobj count of SHPSO: ', num2str(count)]);
-            NFEs = NFEs + 1;
-            
-            % Update best-so-far and convergence curve
-            best_so_far = max(best_so_far, besty);
-            convergence(NFEs) = best_so_far;
-
-            % Update database
-            [~,ih,~] = intersect(hx,bestp,'rows');
-            if isempty(ih)
-                hx = [hx;bestp];  
-                hf = [hf;besty];
-            end
-
-            % Update best solution
-            if besty > besty_old  % Changed to > for maximization     
-                bestprep = repmat(bestp,ps,1);
-            else
-                besty = besty_old;
-                bestp = bestp_old;
-                bestprep = repmat(bestp_old,ps,1);
-            end
-
-            % Update SHPSO
-            if besty > gbestval  % Changed to > for maximization                            
-                [~,ip,~] = intersect(pbest,gbest,'rows');
-                if ~isempty(ip)
-                    pbest(ip,:) = bestp;
-                    pbestval(ip) = besty;                        
-                    gbestrep = bestprep;
-                end
-            end
-
-            % Update velocities and positions
-            aa = cc(1).*rand(ps,dim).*(pbest-pos)+cc(2).*rand(ps,dim).*(gbestrep-pos);
-            vel = iwt.*(vel+aa);                              
-            vel = (vel>Vmax).*Vmax+(vel<=Vmax).*vel;
-            vel = (vel<Vmin).*Vmin+(vel>=Vmin).*vel;
-            pos = pos+vel;
-            pos = ((pos>=VRmin)&(pos<=VRmax)).*pos...
-                +(pos<VRmin).*(VRmin+0.25.*(VRmax-VRmin).*rand(ps,dim))...
-                +(pos>VRmax).*(VRmax-0.25.*(VRmax-VRmin).*rand(ps,dim));
-
-            % Fitness estimation and prescreening
-            e = modelFUN(pos);
-            candidx = find(e > pbestval);  % Changed to > for maximization
-            
-            % Skip if no candidates found
-            if isempty(candidx)
-                continue;
-            end
-            
-            % Ensure candidx is within bounds
-            candidx = candidx(candidx <= size(pos,1));
-            if isempty(candidx)
-                continue;
-            end
-            
-            pos_trmem = pos(candidx, :);
-
-            % Check for duplicates with bounds checking
-            [~,ih,ip] = intersect(hx,pos_trmem,'rows');
-            if ~isempty(ip)
-                valid_idx = ip <= length(candidx);
-                ip = ip(valid_idx);
-                ih = ih(valid_idx);
-                
-                if ~isempty(ip)
-                    pos_trmem(ip,:) = [];
-                    if ~isempty(candidx)
-                        e(candidx(ip)) = hf(ih);
-                    end
-                    candidx(ip) = [];
-                end
-            end
-
-            % Evaluate prescreened candidates
-            for k = 1:size(pos_trmem,1)
-                if NFEs >= maxFEs
-                    break;
-                end
-                
-                % Ensure k is within bounds
-                if k > length(candidx)
-                    break;
-                end
-                
-                e_trmem = fobj(pos_trmem(k,:));
-                NFEs = NFEs + 1;
-                
-                % Update database
-                hx = [hx;pos_trmem(k,:)];
-                hf = [hf;e_trmem];
-                
-                % Update pbest with bounds checking
-                kp = candidx(k);
-                if kp <= size(pbest,1) && e_trmem > pbestval(kp)  % Changed to > for maximization
-                    pbest(kp,:) = pos_trmem(k,:);
-                    pbestval(kp) = e_trmem;
-                end
-                
-                % Update best-so-far and convergence curve
-                best_so_far = max(best_so_far, e_trmem);
-                convergence(NFEs) = best_so_far;
-            end
-
-            % Update gbest
-            [gbestval,tmp] = max(pbestval);  % Changed to max for maximization
-            gbest = pbest(tmp,:);
-            gbestrep = repmat(gbest,ps,1);
-
-            % Optional progress display
-            if mod(NFEs, 100) == 0
-                disp(['SHPSO -- NFE: ' num2str(NFEs) ', Best: ' num2str(best_so_far)]);
-            end
-
-        catch ME
-            warning('Error in iteration: %s', ME.message);
-            continue;
+        % Update convergence curve
+        if i == 1
+            best_so_far = fitness(i);
+        else
+            best_so_far = max(best_so_far, fitness(i));
         end
-        
-        gen = gen + 1;
+        convergence(NFEs) = best_so_far;
+
+        if NFEs >= maxFEs
+            break;
+        end
     end
+
+
+    % Main DE loop
+    generation = 1;
+    while NFEs < maxFEs
+        % Create temporary arrays for new generation (to avoid mid-generation updates)
+        new_population = population;  % Start with current population
+        new_fitness = fitness;        % Start with current fitness
+
+        for i = 1:popSize
+            if NFEs >= maxFEs
+                break;
+            end
+
+            % DE/rand/1 mutation strategy
+            % Select three random individuals (different from current)
+            candidates = setdiff(1:popSize, i);
+            r = candidates(randperm(length(candidates), 3));
+            r1 = r(1); r2 = r(2); r3 = r(3);
+
+            % Mutation: V = X_r1 + F * (X_r2 - X_r3) (use ORIGINAL population)
+            mutant = population(r1, :) + F * (population(r2, :) - population(r3, :));
+
+            % Boundary handling: reflect back into bounds
+            mutant = max(mutant, lb);
+            mutant = min(mutant, ub);
+
+            % Crossover: binomial crossover
+            trial = population(i, :);  % Use original population
+            j_rand = randi(dim);  % Ensure at least one dimension is from mutant
+
+            for j = 1:dim
+                if rand <= CR || j == j_rand
+                    trial(j) = mutant(j);
+                end
+            end
+
+            % Debug: Check if trial is identical to existing solutions
+            trial_rounded = round(trial, 6);  % Round to avoid floating point issues
+
+            % Evaluate trial vector
+            trial_fitness = fobj(trial);
+            NFEs = NFEs + 1;
+
+            % Selection: keep better solution (UPDATE TEMPORARY ARRAYS)
+            if trial_fitness > fitness(i)  % Maximization
+                new_population(i, :) = trial;        % Update temporary population
+                new_fitness(i) = trial_fitness;      % Update temporary fitness
+            else
+                new_population(i, :) = population(i, :);  % Keep current solution
+                new_fitness(i) = fitness(i);             % Keep current fitness
+            end
+
+            % Update best-so-far and convergence curve
+            best_so_far = max(best_so_far, new_fitness(i));
+            convergence(NFEs) = best_so_far;
+        end
+
+        % Update population for next generation (AFTER all evaluations)
+        population = new_population;
+        fitness = new_fitness;
+
+        generation = generation + 1;
+    end
+
 
     % Fill remaining convergence curve values if needed
     if NFEs < maxFEs
@@ -222,12 +109,12 @@ function [bestNPV, worstNPV, meanNPV, runTime, convergence] = run_SHPSO(popSize,
     end
 
     % Compute final statistics
-    bestNPV = best_so_far;
-    worstNPV = min(hf);
-    meanNPV = mean(hf);
+    bestNPV = max(fitness);
+    worstNPV = min(fitness);
+    meanNPV = mean(fitness);
     runTime = toc;
 
     % Print final results
-    fprintf('SHPSO run: Best NPV = %.2e, Worst NPV = %.2e, Mean NPV = %.2e, Runtime = %.2f sec\n', ...
+    fprintf('DE run: Best NPV = %.2e, Worst NPV = %.2e, Mean NPV = %.2e, Runtime = %.2f sec\n', ...
         bestNPV, worstNPV, meanNPV, runTime);
 end

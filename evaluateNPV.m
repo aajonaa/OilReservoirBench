@@ -1,4 +1,4 @@
-function npv = evaluateNPV(injectionRates, G, rock, fluid, model, state0, W, economicParams)
+function npv = evaluateNPV(injectionRates, G, rock, fluid, model, state0, W, economicParams, nonlinear, schedule)
 %% evaluateNPV - Modern NPV Evaluation for Oil Reservoir Optimization
 %
 % This function evaluates the Net Present Value (NPV) for a given set of
@@ -18,6 +18,8 @@ function npv = evaluateNPV(injectionRates, G, rock, fluid, model, state0, W, eco
 %                    .ri (water injection cost $/STB)
 %                    .deltaT (time step duration in days)
 %                    .nTimeSteps (number of time steps)
+%   nonlinear      - NonLinearSolver with AMGCL configuration
+%   schedule       - Original Eclipse schedule structure
 %
 % OUTPUT:
 %   npv - Net Present Value [$USD]
@@ -59,30 +61,46 @@ function npv = evaluateNPV(injectionRates, G, rock, fluid, model, state0, W, eco
             return;
         end
         
-        %% Create simulation schedule
-        schedule = struct();
-        schedule.control = repmat(struct('W', W), nTimeSteps, 1);
-        schedule.step = struct();
-        schedule.step.val = deltaT * day * ones(nTimeSteps, 1);  % Convert days to seconds
-        schedule.step.control = (1:nTimeSteps)';
-        
+        %% Modify the existing schedule to use our custom injection rates
+        % Create a custom schedule with our timesteps and rates
+        customSchedule = schedule;  % Start with the original schedule structure
+
+        % Replace the timestep structure
+        customSchedule.step.val = deltaT * day * ones(nTimeSteps, 1);  % Convert days to seconds
+        customSchedule.step.control = (1:nTimeSteps)';
+
+        % Create new control structures for each timestep
+        customSchedule.control = repmat(struct('W', W), nTimeSteps, 1);
+
         % Update injection rates for each time step
         for t = 1:nTimeSteps
             W_t = W;  % Copy well structure
-            
+
             % Set injection rates for this time step
             for i = 1:nInjectors
-                W_t(i).val = rates(i, t);     % Injection rate (m³/day)
-                W_t(i).type = 'rate';         % Rate control
-                W_t(i).compi = [1, 0];        % Pure water injection
-                
-                % Original pressure limit from Eclipse
-                if ~isfield(W_t(i), 'lims')
-                    W_t(i).lims = struct();
-                end
-                W_t(i).lims.bhp = 420*barsa;  % Maximum injection pressure
+
+
+                % UNIT CONVERSION: Convert m³/day to MRST internal units
+                % MRST typically expects rates in m³/s, not m³/day
+                rate_m3_per_sec = rates(i, t) / day;  % Convert m³/day to m³/s
+
+                % Force override all well control parameters
+                W_t(i).val = rate_m3_per_sec;  % Injection rate in m³/s (MRST units)
+                W_t(i).type = 'rate';          % Rate control
+                W_t(i).compi = [1, 0];         % Pure water injection
+                W_t(i).sign = 1;               % Injection well
+                W_t(i).status = true;          % Well is open
+
+                % Clear any existing limits that might override our rates
+                W_t(i).lims = struct();
+                W_t(i).lims.bhp = 420*barsa;   % Maximum injection pressure
+                W_t(i).lims.rate = rate_m3_per_sec * 1.1;  % Rate limit in m³/s
+
+
+
+
             end
-            
+
             % Production wells keep original BHP control
             for i = (nInjectors+1):numel(W_t)
                 W_t(i).type = 'bhp';
@@ -90,14 +108,23 @@ function npv = evaluateNPV(injectionRates, G, rock, fluid, model, state0, W, eco
                 W_t(i).compi = [0, 1];        % Expect oil production
                 % No rate limits (original specification)
             end
-            
-            schedule.control(t).W = W_t;
+
+            customSchedule.control(t).W = W_t;
         end
+
+
         
-        %% Run reservoir simulation (Modern MRST-2024b approach)
+        %% Run reservoir simulation (High-performance MRST-2024b approach with AMGCL)
         try
-            % Run simulation with modified MRST defaults (timestep control in source code)
-            [wellSols, states] = simulateScheduleAD(state0, model, schedule, 'Verbose', true);
+            % Run simulation with AMGCL-optimized NonLinearSolver for maximum speed
+            % IMPORTANT: Use customSchedule instead of the original Eclipse schedule
+            [wellSols, states] = simulateScheduleAD(state0, model, customSchedule, ...
+                'Verbose', false, ...           % Disable verbose output for speed
+                'NonLinearSolver', nonlinear);  % Use AMGCL-configured solver
+
+
+
+
 
             if isempty(wellSols) || length(wellSols) < nTimeSteps
                 npv = -1e10;  % Penalty for simulation failure
@@ -183,7 +210,57 @@ function npv = evaluateNPV(injectionRates, G, rock, fluid, model, state0, W, eco
         % Any error results in penalty
         npv = -1e10;
     end
-    
+
+    % Universal NPV tracking for all optimizers
+    global NPV_EVAL_COUNT NPV_BEST_SO_FAR NPV_POP_SIZE NPV_INIT_COMPLETE
+
+    % Initialize if needed
+    if isempty(NPV_EVAL_COUNT)
+        NPV_EVAL_COUNT = 0;
+        NPV_BEST_SO_FAR = -inf;
+        NPV_INIT_COMPLETE = false;
+    end
+    if isempty(NPV_POP_SIZE)
+        NPV_POP_SIZE = [];
+    end
+    if isempty(NPV_INIT_COMPLETE)
+        NPV_INIT_COMPLETE = false;
+    end
+
+    % Update tracking
+    NPV_EVAL_COUNT = NPV_EVAL_COUNT + 1;
+    isNewBest = npv > NPV_BEST_SO_FAR;
+    if isNewBest
+        NPV_BEST_SO_FAR = npv;
+    end
+
+    % Determine phase (safer logic)
+    if ~isempty(NPV_POP_SIZE) && isnumeric(NPV_POP_SIZE) && NPV_POP_SIZE > 0
+        if ~NPV_INIT_COMPLETE && NPV_EVAL_COUNT <= NPV_POP_SIZE
+            phase = 'Initial Pop';
+            if NPV_EVAL_COUNT == NPV_POP_SIZE
+                NPV_INIT_COMPLETE = true;
+            end
+        else
+            phase = 'Evolution';
+        end
+    else
+        phase = 'Unknown';
+    end
+
+    % Clean NPV tracking with phase information
+    fprintf('FE %d (%s): NPV=%.2e | Current Best=%.2e', NPV_EVAL_COUNT, phase, npv, NPV_BEST_SO_FAR);
+    if isNewBest
+        fprintf(' *** NEW BEST! ***');
+    end
+    fprintf('\n');
+
+    % Special message when initial population is complete
+    if ~isempty(NPV_POP_SIZE) && isnumeric(NPV_POP_SIZE) && NPV_EVAL_COUNT == NPV_POP_SIZE
+        fprintf('=== Initial Population Complete (FE %d) | Best NPV: %.2e ===\n', NPV_POP_SIZE, NPV_BEST_SO_FAR);
+        fprintf('=== Evolution Phase Starting (FE %d+) ===\n', NPV_POP_SIZE + 1);
+    end;
+
     % Restore warnings
     warning('on', 'all');
 end
