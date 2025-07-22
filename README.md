@@ -28,3 +28,7 @@ Egg model, oil reservoir optimization benchmark for research.
 ## How to use this self-contained oil reservoir benchmark
 - Run setup_benchmark.m
 - Run runOilReservoirBenchmark.m
+
+## Todo list
+- [] Structure the folder structure, the optimizer be a single folder (which includes the surrogate tool and the utils)
+- [] Modify the optimizers to make sure they follow their original publications
