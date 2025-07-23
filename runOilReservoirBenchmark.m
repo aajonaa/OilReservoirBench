@@ -214,6 +214,13 @@ end
 % Create X-axis values
 XValue = (0:NumofRecord-1) * (maxFEs/(NumofRecord-1));
 
+% Create sampled convergence data for smooth plotting
+XValue_sampled = linspace(0, maxFEs, NumSample);
+YValue_sampled = zeros(algoNum, NumSample);
+for algo = 1:algoNum
+    YValue_sampled(algo,:) = YValue(algo, sample_indices);
+end
+
 % Set up figure with professional styling
 figure('Position', [100, 100, 1000, 600]);
 set(gcf, 'color', 'white');
@@ -239,7 +246,7 @@ end
 hold off;
 xlabel('FEs');
 ylabel('NPV (USD)');
-title('Oil Reservoir Optimization Convergence', 'FontWeight', 'normal');
+title('Oil Reservoir Optimization Convergence (Full Resolution)', 'FontWeight', 'normal');
 legend('Location', 'southeast');
 
 % Beautify the figure with professional styling
@@ -270,12 +277,71 @@ set(gca, ...
 
 axis tight;
 
-% Save convergence plot
-CCFigName = fullfile(dirName, [optimizers{1}, '-OilReservoir-CC']);
+% Save full resolution convergence plot
+CCFigName = fullfile(dirName, [optimizers{1}, '-OilReservoir-CC-Full']);
 print(CCFigName, '-dtiff', '-r600');
 saveas(gcf, CCFigName, 'fig');
 
-fprintf('✓ Convergence plot saved: %s\n', CCFigName);
+fprintf('✓ Full resolution convergence plot saved: %s\n', CCFigName);
+
+%% Generate Sampled Convergence Plot (Smooth)
+fprintf('Generating sampled convergence plot for smooth visualization...\n');
+
+% Set up second figure for sampled plot
+figure('Position', [150, 150, 1000, 600]);
+set(gcf, 'color', 'white');
+
+% Plot sampled convergence curves (smooth)
+for algo = algoNum:-1:1
+    plot(XValue_sampled, YValue_sampled(algo,:), [linestyles{algo} Markers{algo}], ...
+        'LineWidth', 1.5, ...
+        'Color', MarkerEdgeColors(algo,:), ...
+        'MarkerFaceColor', MarkerEdgeColors(algo,:), ...
+        'MarkerSize', 4, ...
+        'DisplayName', optimizers{algo});
+    hold on;
+end
+
+hold off;
+xlabel('FEs');
+ylabel('NPV (USD)');
+title('Oil Reservoir Optimization Convergence (Sampled)', 'FontWeight', 'normal');
+legend('Location', 'southeast');
+
+% Apply same beautification as full plot
+a = findobj(gcf);
+allaxes = findall(a,'Type','axes');
+alltext = findall(a,'Type','text');
+set(allaxes,'FontName','Times New Roman','LineWidth',1,'FontSize',8);
+set(alltext,'FontName','Times New Roman','FontSize',10);
+set(gcf, 'PaperUnits', 'inches');
+
+krare = 3;
+figureWidth = krare*4/3;
+figureHeight = krare*3/3;
+set(gcf, 'PaperPosition', [0,0,figureWidth,figureHeight]);
+
+set(gca, ...
+    'Box', 'on', ...
+    'TickDir', 'in', ...
+    'TickLength', [.01 .01], ...
+    'XTick', 0:200:maxFEs, ...
+    'XMinorTick', 'off', ...
+    'YMinorTick', 'on', ...
+    'YGrid', 'off', ...
+    'XGrid', 'off', ...
+    'XColor', [0 0 0], ...
+    'YColor', [0 0 0], ...
+    'LineWidth', 0.5);
+
+axis tight;
+
+% Save sampled convergence plot
+CCFigNameSampled = fullfile(dirName, [optimizers{1}, '-OilReservoir-CC-Sampled']);
+print(CCFigNameSampled, '-dtiff', '-r600');
+saveas(gcf, CCFigNameSampled, 'fig');
+
+fprintf('✓ Sampled convergence plot saved: %s\n', CCFigNameSampled);
 
 %% Step 8: Export Results to Excel
 fprintf('\nStep 8: Exporting results to Excel...\n');
@@ -300,13 +366,7 @@ cgTable = array2table(cgData, 'VariableNames', cgHeaders);
 % Write convergence data to Excel
 writetable(cgTable, outputPath, 'Sheet', 'Convergence_Data');
 
-% Create sampled convergence data for cleaner plots
-XValue_sampled = linspace(0, maxFEs, NumSample);
-YValue_sampled = zeros(algoNum, NumSample);
-for algo = 1:algoNum
-    YValue_sampled(algo,:) = YValue(algo, sample_indices);
-end
-
+% Use already created sampled convergence data
 cgHeadersSample = ['FEs', optimizers];
 cgDataSample = [XValue_sampled' YValue_sampled'];
 cgTableSample = array2table(cgDataSample, 'VariableNames', cgHeadersSample);
