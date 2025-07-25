@@ -16,8 +16,8 @@ function [bestNPV, worstNPV, meanNPV, runTime, convergence] = runSHPSO(popSize, 
     NFEs = 0;
     convergence = zeros(1, maxFEs);
 
-    % Initialize population randomly within bounds
-    population = repmat(lb, popSize, 1) + repmat(ub - lb, popSize, 1) .* rand(popSize, dim);
+    % Initialize population using Latin Hypercube Sampling (same as DESO)
+    population = repmat(lb, popSize, 1) + (repmat(ub, popSize, 1) - repmat(lb, popSize, 1)) .* lhsdesign(popSize, dim);
     fitness = zeros(popSize, 1);
 
     % Evaluate initial population
